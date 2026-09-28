@@ -422,7 +422,7 @@ func TestDaemonSearchOpensDerivedSidecarWithoutEmbeddingsAndClosesIt(t *testing.
 	assert.Equal(t, searchindex.ModeLexical, result.Mode)
 
 	require.NoError(t, search.Close())
-	_, err = search.index.GenerationAvailable(t.Context(), "missing")
+	_, _, err = search.index.ActiveGeneration(t.Context())
 	require.Error(t, err)
 }
 
@@ -458,7 +458,7 @@ func TestDaemonSearchClosesSidecarOnConstructionFailures(t *testing.T) {
 					BaseURL: "file:///tmp/provider", Model: "model", Dims: 2,
 				}
 			},
-			wantError: "base_url must use HTTP or HTTPS",
+			wantError: "embed endpoint must use http or https",
 		},
 	}
 

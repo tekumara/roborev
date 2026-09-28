@@ -1071,7 +1071,7 @@ timeout_seconds = 30
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `base_url` | - | OpenAI-compatible endpoint base; Roborev appends `/embeddings` |
+| `base_url` | - | OpenAI-compatible endpoint base; Roborev appends `/embeddings` unless the path already ends with it. Must not contain credentials, a query, or a fragment |
 | `model` | - | Provider model identifier |
 | `dims` | - | Required positive response dimension |
 | `api_key` | - | Optional inline bearer credential; mutually exclusive with `api_key_env` |
@@ -1080,7 +1080,7 @@ timeout_seconds = 30
 | `fingerprint_salt` | - | Optional operator-controlled generation invalidator |
 | `batch_size` | `64` | Maximum documents per provider request |
 | `timeout_seconds` | `30` | Provider request timeout in seconds |
-| `trust_private_network` | `false` | Allow a bearer token over HTTP to a trusted private-network endpoint |
+| `trust_private_network` | `false` | Allow plain HTTP to a private, link-local, or carrier-grade NAT IP address; host names still require HTTPS |
 
 `base_url`, `model`, and `dims` must be configured together. A configured
 `api_key_env` must exist and contain a non-empty value when the daemon starts.
