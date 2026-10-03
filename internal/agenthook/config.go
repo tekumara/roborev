@@ -58,8 +58,8 @@ func ResolveOptions(cli Options, changed map[string]bool) (Options, error) {
 func ResolveOptionsForAgent(agent string, cli Options, changed map[string]bool) (Options, error) {
 	agent = strings.ToLower(strings.TrimSpace(agent))
 	resolver := resolveAgentOptions
-	if agent != "" && agent != string(AgentGrok) {
-		profile, err := kitagenthook.ParseAgent(agent)
+	if agent != "" {
+		profile, err := ParseRuntimeAgent(agent)
 		if err != nil {
 			return Options{}, err
 		}

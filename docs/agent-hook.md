@@ -19,6 +19,9 @@ The integration supports every profile in
 - Hermes Agent
 - Qwen Code
 
+Roborev also supports Grok Build hooks and a [native Pi extension](#pi). Pi uses
+its own package installer rather than external hook configuration.
+
 Kit owns each harness's native config format, event names, command quoting,
 payload normalization, and response encoding. Roborev owns only installed-agent
 selection, reminder policy, and local session state.
@@ -173,6 +176,76 @@ directly invoke `agent-hook run` and select exactly one matching `--agent`;
 shell pipelines, chaining, command substitutions, and wrappers are rejected.
 Roborev adds its ownership marker before installation. `--command` cannot be
 combined with `--binary`.
+
+### Pi
+
+Use Pi 0.99.2 or later and install Bun. Merge this setting into
+`~/.pi/agent/settings.json` before installing:
+
+```json
+{
+  "npmCommand": ["bun"]
+}
+```
+
+Pi's default npm installer rejects this repository's existing `workspace:*`
+dependency. The setting selects Bun for all Pi package installations.
+
+Install the native extension:
+
+```bash
+pi install git:github.com/kenn-io/roborev
+```
+
+Restart Pi or run `/reload`. Use `--local` for a project-scoped install. The
+roborev CLI must support `agent-hook run --agent pi`, and the regular daemon
+must already be running. The extension does not install or start roborev.
+`roborev agent-hook install` continues to manage the nine external hook
+integrations; it does not install Pi packages.
+
+Pi reads the repository-root `package.json`, which exposes
+`packages/roborev-pi/src/index.ts` and the existing `roborev-fix` CLI skill. Git
+package sources do not select workspace subdirectories. To pin a revision,
+append `@<tag-or-commit>` to the source and choose a revision containing the
+extension. See
+[Pi's package documentation](https://github.com/earendil-works/pi/blob/v0.99.2/packages/coding-agent/docs/packages.md).
+
+Update or remove the package through Pi:
+
+```bash
+pi update git:github.com/kenn-io/roborev
+pi remove git:github.com/kenn-io/roborev
+```
+
+Pinned tags and commits do not move on update. Remove the pinned source and
+install the new revision to change the pin.
+
+The extension maps Pi's `bash` tool calls and results to `PreToolUse` and
+`PostToolUse`. Nested shell calls and failed results are included. It appends
+post-tool reminders without replacing output, structured data, or error status.
+User-entered `!` commands and PowerShell tools are not observed.
+
+A completed `agent_before_settle` activity becomes a `Stop`. A triggered
+reminder adds a custom message and requests one continuation. The next Stop in
+that continuation sets `stop_hook_active`, so the daemon skips recursive Stop
+accounting. Aborted or failed activities and already-queued continuations are
+not counted.
+
+Pi's session manager supplies the session ID for every event. Reloading the
+extension or resuming the session preserves its daemon counters. Forks use
+separate session IDs. The daemon remains the source of truth for all thresholds,
+review acknowledgements, snoozes, and fix ownership. There is no separate Pi
+counter store.
+
+The extension calls `roborev` from `PATH`, including version-manager shims. Set
+`ROBOREV_PI_BINARY` to another executable path if needed. The callback reuses
+roborev's config resolution, daemon discovery, fix guidelines, and exact
+`fix-done` command. It identifies itself as `pi`, not another hook profile.
+
+Missing executables, config errors, malformed responses, and daemon failures
+produce diagnostics and let Pi continue. The extension does not enqueue reviews
+or edit files itself. Reminder instructions may ask the active agent to evaluate
+findings and make in-scope fixes.
 
 ### After upgrading
 

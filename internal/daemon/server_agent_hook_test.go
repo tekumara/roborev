@@ -118,6 +118,7 @@ func TestAgentHookEventUsesDatabaseReviewState(t *testing.T) {
 	))
 
 	body, err := json.Marshal(agenthook.Request{
+		Agent: agenthook.AgentPi,
 		Event: agenthook.Input{
 			SessionID:     "session-1",
 			CWD:           repo.Path(),
@@ -141,6 +142,22 @@ func TestAgentHookEventUsesDatabaseReviewState(t *testing.T) {
 	var snapshot agenthook.Snapshot
 	require.NoError(t, json.Unmarshal(persisted, &snapshot))
 	assert.Equal(t, 1, snapshot.Sessions["session-1"].ReminderPromptCount)
+	assert.Equal(t, 1, snapshot.Sessions["session-1"].Count)
+	assert.Equal(t, 1, snapshot.Sessions["session-1"].FailedReviewCount)
+	require.Len(t, snapshot.FixSessions, 1)
+	for _, fix := range snapshot.FixSessions {
+		assert.Equal(t, agenthook.AgentPi, fix.Agent)
+		assert.Equal(t, "session-1", fix.SessionID)
+		assert.Len(t, fix.ReviewIDs, 1)
+		assert.Contains(t, fix.ReviewIDs, job.ID)
+	}
+
+	restarted, _, _ := newTestServer(t)
+	sessions := serveHuma(t, restarted, http.MethodGet, "/api/agent-hook/sessions", nil)
+	require.Equal(t, http.StatusOK, sessions.Code)
+	var restored AgentHookSessionsOutput
+	require.NoError(t, json.Unmarshal(sessions.Body.Bytes(), &restored.Body))
+	assert.Equal(t, snapshot.Sessions["session-1"], restored.Body.Sessions["session-1"])
 }
 
 func TestAgentHookResetPersistsSelectedSession(t *testing.T) {

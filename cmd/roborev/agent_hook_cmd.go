@@ -17,6 +17,11 @@ import (
 	"go.kenn.io/roborev/internal/githook"
 )
 
+var nativeAgentHookRunners = map[kitagenthook.Agent]func(agenthook.Options, io.Reader, io.Writer, io.Writer) error{
+	agenthook.AgentGrok: runGrokAgentHook,
+	agenthook.AgentPi:   runPiAgentHook,
+}
+
 func agentHookCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "agent-hook",
@@ -90,12 +95,12 @@ func agentHookRunCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if rawAgent == string(agenthook.AgentGrok) {
-				return runGrokAgentHook(resolved, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
-			}
-			profile, err := kitagenthook.ParseAgent(rawAgent)
+			profile, err := agenthook.ParseRuntimeAgent(rawAgent)
 			if err != nil {
 				return err
+			}
+			if run, ok := nativeAgentHookRunners[profile]; ok {
+				return run(resolved, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 			}
 			return runAgentHook(profile, resolved, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},

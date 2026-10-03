@@ -2,7 +2,13 @@
   "private": true,
   "workspaces": ["web", "packages/*"],
   "packageManager": "bun@1.3.14",
+  "pi": {
+    "extensions": ["./packages/roborev-pi/src/index.ts"],
+    "skills": ["./internal/skills/claude/roborev-fix"]
+  },
   "scripts": {
+    "pi:check": "bun run --cwd packages/roborev-pi check",
+    "pi:test": "bun run --cwd packages/roborev-pi test",
     "web:check": "bun run --cwd web check",
     "web:test": "bun run --cwd web test && bun run --cwd packages/roborev-ui test",
     "web:test:e2e": "bun run --cwd web test:e2e",

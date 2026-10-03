@@ -70,8 +70,8 @@ You can also choose the exact binary path with
 - **Auto-Fix** - `roborev fix` feeds review findings to an agent that
   applies fixes and commits. `roborev refine` iterates until reviews pass.
 - **Agent Hook** - Optional hooks for Claude Code, Codex, Copilot CLI, Cursor,
-  Factory Droid, Gemini CLI, Hermes, and Qwen bring open findings back into the
-  active agent session.
+  Factory Droid, Gemini CLI, Hermes, Qwen, and Grok Build, plus a native Pi
+  extension, bring open findings back into the active agent session.
 - **Code Analysis** - Built-in analysis types (duplication, complexity,
   refactoring, test fixtures, dead code, security) that agents can fix
   automatically.
@@ -118,6 +118,19 @@ Installed hooks post events to the regular roborev daemon. That daemon evaluates
 the reminders and persists session counters and delivered review IDs in
 `${ROBOREV_DATA_DIR:-~/.roborev}/agent-hook/state.json`. Hook callbacks fail open
 when the daemon is unavailable, so they do not block the coding agent.
+
+Pi uses a native extension instead of `agent-hook install`. Use Pi 0.99.2 or
+later, a compatible roborev CLI, and a running daemon. Install Bun and set
+`"npmCommand": ["bun"]` in Pi's user settings before installing this Bun
+workspace repository:
+
+```bash
+pi install git:github.com/kenn-io/roborev
+```
+
+Restart Pi or run `/reload`. See the
+[Pi extension guide](packages/roborev-pi/README.md) for configuration, version
+pinning, updates, and lifecycle behavior.
 
 For fully automated iteration (advanced feature), use `refine`:
 
@@ -377,6 +390,7 @@ hook, so a configured integration never goes dark unnoticed.
 | `ROBOREV_AGENT_HOOK_COMMIT_THRESHOLD` | Override agent-hook commit threshold |
 | `ROBOREV_AGENT_HOOK_FAILED_REVIEW_THRESHOLD` | Override agent-hook failed-review threshold |
 | `ROBOREV_AGENT_HOOK_ROBOREV_ADDR` | Override the regular daemon address used by Agent Hook |
+| `ROBOREV_PI_BINARY` | Executable path used by the native Pi extension (default: `roborev` on `PATH`) |
 | `ROBOREV_DROID_HOOK_TURN_THRESHOLD` | Override Factory Droid agent-hook Stop threshold |
 | `ROBOREV_DROID_HOOK_COMMIT_THRESHOLD` | Override Factory Droid agent-hook commit threshold |
 | `ROBOREV_DROID_HOOK_FAILED_REVIEW_THRESHOLD` | Override Factory Droid agent-hook failed-review threshold |

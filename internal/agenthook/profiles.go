@@ -14,7 +14,19 @@ import (
 
 const (
 	AgentGrok kitagenthook.Agent = "grok"
+	AgentPi   kitagenthook.Agent = "pi"
 )
+
+// ParseRuntimeAgent includes native extensions which are not installed by kit.
+func ParseRuntimeAgent(raw string) (kitagenthook.Agent, error) {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	for _, agent := range []kitagenthook.Agent{AgentGrok, AgentPi} {
+		if raw == string(agent) {
+			return agent, nil
+		}
+	}
+	return kitagenthook.ParseAgent(raw)
+}
 
 var profileExecutables = map[kitagenthook.Agent][]string{
 	kitagenthook.AgentClaude:  {"claude"},
