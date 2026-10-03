@@ -115,6 +115,8 @@ pi -e .
 The tests load the repository manifest through Pi's real package loader. They
 build roborev into a temporary directory and use an isolated HTTP fixture. They
 never install a development binary into `PATH` or contact your live daemon.
+They isolate `HOME` as well as Pi's agent directory so personal skills cannot
+satisfy the package checks.
 The Git installation test clones committed `HEAD`. Commit package and resource
 changes before using that test to verify what Git users receive.
 

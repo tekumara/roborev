@@ -16,6 +16,8 @@ it("installs, loads, updates, pins, and removes the Git package using the docume
   const temp = mkdtempSync(join(tmpdir(), "roborev-pi-git-"));
   try {
     const repo = join(temp, "source");
+    // Pi also scans ~/.agents/skills, independently of agentDir.
+    vi.stubEnv("HOME", temp);
     vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
     vi.stubEnv("GIT_CONFIG_GLOBAL", join(temp, "gitconfig"));
     const git = (args: string[], cwd = repo) =>
@@ -46,6 +48,11 @@ it("installs, loads, updates, pins, and removes the Git package using the docume
     git(["config", "core.hooksPath", join(temp, "empty-hooks")]);
     git(["tag", "v1"]);
     const pinnedCommit = git(["rev-parse", "HEAD"]);
+    // An install can generate a missing lockfile. Verify the Git package ships
+    // its lockfile rather than silently resolving fresh dependency versions.
+    expect(git(["ls-tree", "--name-only", "HEAD", "--", "bun.lock"])).toBe(
+      "bun.lock",
+    );
 
     // Exercise the supported Git URL syntax with a local remote, never publishing.
     const source = "git:github.com/example/roborev-fixture";
@@ -63,6 +70,8 @@ it("installs, loads, updates, pins, and removes the Git package using the docume
       settingsManager: settings,
     });
     await packages.installAndPersist(source);
+    const installed = packages.getInstalledPath(source, "user")!;
+    expect(installed).toBeDefined();
 
     const resources = new DefaultResourceLoader({
       cwd: temp,
@@ -73,13 +82,11 @@ it("installs, loads, updates, pins, and removes the Git package using the docume
     await resources.reload();
     expect(resources.getExtensions().errors).toEqual([]);
     expect(resources.getExtensions().extensions).toHaveLength(1);
+    // A same-named skill outside the installed package must not satisfy this.
     expect(
-      resources
-        .getSkills()
-        .skills.some((skill) => skill.name === "roborev-fix"),
-    ).toBe(true);
-    const installed = packages.getInstalledPath(source, "user");
-    expect(installed).toBeDefined();
+      resources.getSkills().skills.find((skill) => skill.name === "roborev-fix")
+        ?.filePath,
+    ).toBe(join(installed, "internal/skills/claude/roborev-fix/SKILL.md"));
     expect(git(["rev-parse", "HEAD"], installed)).toBe(pinnedCommit);
 
     git(["commit", "--allow-empty", "-m", "Next revision"]);

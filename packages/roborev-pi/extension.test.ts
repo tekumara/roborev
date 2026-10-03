@@ -82,6 +82,8 @@ beforeEach(() => {
   requests = [];
   response = {};
   status = 200;
+  // Pi also scans ~/.agents/skills, independently of agentDir.
+  vi.stubEnv("HOME", temp);
   vi.stubEnv("ROBOREV_PI_BINARY", binary);
   vi.stubEnv("ROBOREV_DATA_DIR", temp);
   vi.stubEnv("ROBOREV_AGENT_HOOK_ROBOREV_ADDR", address);
@@ -121,8 +123,9 @@ async function load(
   expect(loaded.errors).toEqual([]);
   expect(loaded.extensions).toHaveLength(beforeExtension ? 2 : 1);
   expect(
-    resources.getSkills().skills.some((skill) => skill.name === "roborev-fix"),
-  ).toBe(true);
+    resources.getSkills().skills.find((skill) => skill.name === "roborev-fix")
+      ?.filePath,
+  ).toBe(join(root, "internal/skills/claude/roborev-fix/SKILL.md"));
   const runner = new ExtensionRunner(
     loaded.extensions,
     loaded.runtime,
