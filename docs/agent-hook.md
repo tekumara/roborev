@@ -221,9 +221,12 @@ Pinned tags and commits do not move on update. Remove the pinned source and
 install the new revision to change the pin.
 
 The extension maps Pi's `bash` tool calls and results to `PreToolUse` and
-`PostToolUse`. Nested shell calls and failed results are included. It appends
-post-tool reminders without replacing output, structured data, or error status.
-User-entered `!` commands and PowerShell tools are not observed.
+`PostToolUse`. Nested shell calls and failed results are included. Direct shell
+reminders are appended to the tool result. Nested shell reminders become custom
+messages after the current tool batch, so they reach the model even when
+codemode or another calling tool discards the result. Neither path replaces
+shell output, structured data, or error status. User-entered `!` commands and
+PowerShell tools are not observed.
 
 A completed `agent_before_settle` activity becomes a `Stop`. A triggered
 reminder adds a custom message and requests one continuation. The next Stop in

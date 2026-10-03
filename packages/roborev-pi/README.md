@@ -60,8 +60,10 @@ checked against Pi 0.99.2.
 - `tool_call` reports `bash` as `PreToolUse` with the normalized tool name
   `Bash`.
 - `tool_result` reports `bash` as `PostToolUse`, including failed results.
-  A reminder is appended to the tool result without replacing its output,
-  structured data, or error status. Nested shell calls are included.
+  Direct shell reminders are appended to the tool result. Nested shell
+  reminders become custom messages after the current tool batch, so they reach
+  the model even when the calling tool discards its result. Both preserve the
+  shell output, structured data, and error status.
 - `agent_before_settle` reports a completed activity as `Stop`. A reminder
   becomes a custom message and requests one continuation with
   `continue: true`. Aborted runs, errors, and already-queued continuations do

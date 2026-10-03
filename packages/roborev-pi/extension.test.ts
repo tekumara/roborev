@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  createAgentSession,
+  createCodemodeExtension,
   DefaultResourceLoader,
   ExtensionRunner,
   ModelRegistry,
@@ -31,6 +33,9 @@ let binary: string;
 let server: Server;
 let address: string;
 let registry: ModelRegistry;
+let modelRuntime: ModelRuntime;
+let modelRequests: Array<{ messages: Array<{ role: string; content: unknown }> }>;
+let modelResponses: Array<Record<string, unknown>>;
 let requests: Array<{
   agent: string;
   threshold: number;
@@ -47,17 +52,37 @@ beforeAll(async () => {
   binary = join(temp, process.platform === "win32" ? "roborev.exe" : "roborev");
   // Build only into a disposable directory, never PATH or the user's daemon.
   execFileSync("go", ["build", "-o", binary, "./cmd/roborev"], { cwd: root });
-  registry = new ModelRegistry(
-    await ModelRuntime.create({
-      authPath: join(temp, "auth.json"),
-      modelsPath: null,
-      modelsStorePath: join(temp, "models"),
-      refreshOnCreate: false,
-    }),
-  );
+  modelRuntime = await ModelRuntime.create({
+    authPath: join(temp, "auth.json"),
+    modelsPath: null,
+    modelsStorePath: join(temp, "models"),
+    refreshOnCreate: false,
+  });
+  registry = new ModelRegistry(modelRuntime);
   server = createServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
+    if (req.url === "/v1/chat/completions") {
+      modelRequests.push(JSON.parse(body));
+      const choice = modelResponses.shift();
+      if (!choice) {
+        res.writeHead(500);
+        res.end("Unexpected model request");
+        return;
+      }
+      // Only the tool result triggers a reminder, not the later Stop.
+      if (modelRequests.length > 1) response = {};
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.end(
+        `data: ${JSON.stringify({
+          id: "fixture-response",
+          object: "chat.completion.chunk",
+          model: "fixture",
+          choices: [{ index: 0, ...choice }],
+        })}\n\ndata: [DONE]\n\n`,
+      );
+      return;
+    }
     expect(req.url).toBe("/api/agent-hook/event");
     requests.push(JSON.parse(body));
     res.writeHead(status, { "Content-Type": "application/json" });
@@ -80,6 +105,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   requests = [];
+  modelRequests = [];
+  modelResponses = [];
   response = {};
   status = 200;
   // Pi also scans ~/.agents/skills, independently of agentDir.
@@ -244,6 +271,122 @@ describe(
       });
       expect(requests[0].event.tool_use_id).toBe("script-1/0");
     });
+
+    it.each([
+      { printed: true, exitCode: 0 },
+      { printed: false, exitCode: 0 },
+      { printed: true, exitCode: 1 },
+    ])(
+      "delivers nested bash reminders to the next model request (printed=$printed, exit=$exitCode)",
+      async ({ printed, exitCode }) => {
+        const settings = SettingsManager.inMemory({ packages: [root] });
+        const resources = new DefaultResourceLoader({
+          cwd: temp,
+          agentDir: join(temp, "pi"),
+          settingsManager: settings,
+          noContextFiles: true,
+          noPromptTemplates: true,
+          noThemes: true,
+          extensionFactories: [createCodemodeExtension()],
+        });
+        await resources.reload();
+        expect(resources.getExtensions().errors).toEqual([]);
+        modelRuntime.registerProvider("fixture", {
+          api: "openai-completions",
+          baseUrl: `http://${address}/v1`,
+          apiKey: "fixture-key",
+          models: [
+            {
+              id: "fixture",
+              name: "Fixture",
+              reasoning: false,
+              input: ["text"],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 100_000,
+              maxTokens: 1_000,
+            },
+          ],
+        });
+        const script = `const result = await tools.bash({ command: "printf shell-output; exit ${exitCode}" });\n${printed ? "text(result);" : ""}`;
+        modelResponses = [
+          {
+            delta: {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "script-1",
+                  type: "function",
+                  function: {
+                    name: "codemode",
+                    arguments: JSON.stringify({ code: script }),
+                  },
+                },
+              ],
+            },
+            finish_reason: "tool_calls",
+          },
+          {
+            delta: { role: "assistant", content: "Done." },
+            finish_reason: "stop",
+          },
+        ];
+        response = { triggered: true, reason: "Inspect reviews 101 and 102." };
+        const { session } = await createAgentSession({
+          cwd: temp,
+          agentDir: join(temp, "pi"),
+          modelRuntime,
+          model: modelRuntime.getModel("fixture", "fixture"),
+          resourceLoader: resources,
+          settingsManager: settings,
+          sessionManager: SessionManager.inMemory(temp),
+          tools: ["bash", "codemode"],
+        });
+        try {
+          await session.bindExtensions({
+            onError: (error) => {
+              throw new Error(error.error);
+            },
+          });
+          await session.prompt("Run the shell command through codemode.");
+          expect(modelRequests).toHaveLength(2);
+          const messages = modelRequests[1].messages;
+          const toolResult = messages.find((msg) => msg.role === "tool");
+          expect(toolResult?.content).toContain("Script completed");
+          if (printed) {
+            expect(toolResult?.content).toContain('"output":"shell-output"');
+            expect(toolResult?.content).toContain(`"exit_code":${exitCode}`);
+          }
+          expect(toolResult?.content).not.toContain(
+            "Inspect reviews 101 and 102.",
+          );
+          const reminders = messages.filter((msg) =>
+            JSON.stringify(msg.content).includes("Inspect reviews 101 and 102."),
+          );
+          expect(reminders).toHaveLength(1);
+          expect(reminders[0].role).toBe("user");
+          expect(JSON.stringify(reminders[0].content)).toContain(
+            "Verify each finding.",
+          );
+          expect(messages.indexOf(reminders[0])).toBeGreaterThan(
+            messages.findIndex((msg) => msg.role === "tool"),
+          );
+          expect(requests.map((req) => req.event.hook_event_name)).toEqual([
+            "PreToolUse",
+            "PostToolUse",
+            "Stop",
+          ]);
+          expect(requests[1].event.tool_use_id).toMatch(/^script-1\/\d+$/);
+          expect(requests[1].event.tool_response).toMatchObject({
+            structured_content: { output: "shell-output", exit_code: exitCode },
+            is_error: exitCode !== 0,
+          });
+        } finally {
+          session.dispose();
+          modelRuntime.unregisterProvider("fixture");
+        }
+      },
+    );
 
     it("continues a completed run with the exact fix completion command and guards recursive Stops", async () => {
       const { runner, manager } = await load();

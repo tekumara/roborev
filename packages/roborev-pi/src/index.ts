@@ -74,6 +74,19 @@ export default function roborev(pi: ExtensionAPI) {
       ctx,
     );
     if (!response?.context) return;
+    if (event.parentToolCallId) {
+      // Nested results stay with the calling tool, not in the transcript.
+      // Pi inserts context-only messages after the current tool batch.
+      pi.sendMessage(
+        {
+          customType: "roborev-agent-hook",
+          content: response.context,
+          display: true,
+        },
+        { triggerTurn: false },
+      );
+      return;
+    }
     // Keep the original result, including errors and machine-readable data.
     return {
       content: [
