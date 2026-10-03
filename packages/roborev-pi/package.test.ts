@@ -1,12 +1,5 @@
 import { execFileSync } from "node:child_process";
-import {
-  cpSync,
-  globSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,29 +16,6 @@ it("installs, loads, updates, pins, and removes the Git package using the docume
   const temp = mkdtempSync(join(tmpdir(), "roborev-pi-git-"));
   try {
     const repo = join(temp, "source");
-    mkdirSync(repo);
-    const manifest = JSON.parse(
-      readFileSync(join(root, "package.json"), "utf8"),
-    );
-    for (const path of ["package.json", "bun.lock"])
-      cpSync(join(root, path), join(repo, path));
-    // Preserve real workspace dependency manifests without copying node_modules.
-    for (const workspace of globSync(manifest.workspaces, { cwd: root })) {
-      mkdirSync(join(repo, workspace), { recursive: true });
-      cpSync(
-        join(root, workspace, "package.json"),
-        join(repo, workspace, "package.json"),
-      );
-    }
-    for (const resource of [...manifest.pi.extensions, ...manifest.pi.skills]) {
-      cpSync(join(root, resource), join(repo, resource), { recursive: true });
-    }
-    cpSync(
-      join(root, "packages/roborev-pi/src"),
-      join(repo, "packages/roborev-pi/src"),
-      { recursive: true },
-    );
-
     vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
     vi.stubEnv("GIT_CONFIG_GLOBAL", join(temp, "gitconfig"));
     const git = (args: string[], cwd = repo) =>
@@ -54,12 +24,26 @@ it("installs, loads, updates, pins, and removes the Git package using the docume
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       }).trim();
-    git(["init", "-b", "main"]);
+    // Test what Git users receive: HEAD only, without staged, untracked, or
+    // ignored resources from the developer's working tree.
+    git(
+      [
+        "clone",
+        "--no-local",
+        "--single-branch",
+        "--no-tags",
+        "--depth=1",
+        root,
+        repo,
+      ],
+      temp,
+    );
+    // CI can provide a detached HEAD without any local branches. Give only
+    // this disposable remote a default branch so Pi can test unpinned updates.
+    git(["checkout", "-B", "main"]);
     git(["config", "user.name", "Test Author"]);
     git(["config", "user.email", "test@example.com"]);
     git(["config", "core.hooksPath", join(temp, "empty-hooks")]);
-    git(["add", "."]);
-    git(["commit", "-m", "Package fixture"]);
     git(["tag", "v1"]);
     const pinnedCommit = git(["rev-parse", "HEAD"]);
 
